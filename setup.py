@@ -9,7 +9,7 @@ with open("requirements.txt", "r", encoding="utf-8") as fh:
 setup(
     name="paligemma-multitask",
     version="0.1.0",
-    author="chenxingqiang",
+    author="@chenxingqiang, @EtremelyKeep",
     author_email="chenxingqiang@iechor.com",
     description="A toolkit for object detection and multimodal tasks using PaliGemma",
     long_description=long_description,
