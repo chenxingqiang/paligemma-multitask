@@ -10,7 +10,7 @@ setup(
     name="paligemma-multitask",
     version="0.1.0",
     author="chenxingqiang",
-    author_email="chenxingqiang@example.com",
+    author_email="chenxingqiang@iechor.com",
     description="A toolkit for object detection and multimodal tasks using PaliGemma",
     long_description=long_description,
     long_description_content_type="text/markdown",
