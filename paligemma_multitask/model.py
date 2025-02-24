@@ -1,3 +1,5 @@
+import os
+import json
 import torch
 import torch.nn as nn
 from transformers import AutoModelForVision2Seq
@@ -8,7 +10,7 @@ class PaliGemmaMultitaskModel(nn.Module):
         super().__init__()
         self.num_classes = num_classes
         
-        # 加载基础模型
+        # Load base model
         self.base_model = AutoModelForVision2Seq.from_pretrained(
             model_id,
             torch_dtype=torch.float16,
@@ -16,28 +18,32 @@ class PaliGemmaMultitaskModel(nn.Module):
             trust_remote_code=True
         )
         
-        # 暴露配置
-        self.config = self.base_model.config
+        # Get device from base model
+        self.device = next(self.base_model.parameters()).device
         
-        # 获取隐藏层维度
+        # Expose config and generation config
+        self.config = self.base_model.config
+        self.generation_config = self.base_model.generation_config
+        
+        # Get hidden size
         hidden_size = self.base_model.config.hidden_size
         
-        # 添加检测头
+        # Add detection head
         self.detection_head = nn.Sequential(
             nn.Linear(hidden_size, hidden_size, dtype=torch.float16),
             nn.ReLU(),
             nn.Linear(hidden_size, 4, dtype=torch.float16)  # [x1, y1, x2, y2]
-        )
+        ).to(self.device)
         
-        # 添加分类头
+        # Add classification head
         self.class_head = nn.Sequential(
             nn.Linear(hidden_size, hidden_size, dtype=torch.float16),
             nn.ReLU(),
             nn.Linear(hidden_size, num_classes, dtype=torch.float16)
-        )
+        ).to(self.device)
     
     def forward(self, pixel_values=None, input_ids=None, attention_mask=None, **kwargs):
-        # 前向传播
+        # Forward pass
         outputs = self.base_model(
             pixel_values=pixel_values,
             input_ids=input_ids,
@@ -46,16 +52,16 @@ class PaliGemmaMultitaskModel(nn.Module):
             output_hidden_states=True
         )
         
-        # 获取特征
-        features = outputs.hidden_states[-1]  # 使用所有token的特征
+        # Get features
+        features = outputs.hidden_states[-1]  # Use all token features
         batch_size = features.size(0)
         
-        # 生成检测框
-        boxes = self.detection_head(features[:, 0])  # 使用 [CLS] token
-        boxes = torch.sigmoid(boxes)  # 归一化到 [0, 1]
+        # Generate detection boxes
+        boxes = self.detection_head(features[:, 0])  # Use [CLS] token
+        boxes = torch.sigmoid(boxes)  # Normalize to [0, 1]
         
-        # 生成类别预测 - 为每个边界框生成预测
-        class_logits = self.class_head(features[:, 0])  # 使用 [CLS] token
+        # Generate class predictions
+        class_logits = self.class_head(features[:, 0])  # Use [CLS] token
         
         return {
             'boxes': boxes,
@@ -63,21 +69,62 @@ class PaliGemmaMultitaskModel(nn.Module):
         }
     
     def prepare_inputs_for_generation(self, *args, **kwargs):
-        """支持文本生成"""
+        """Support text generation"""
         return self.base_model.prepare_inputs_for_generation(*args, **kwargs)
     
     def generate(self, *args, **kwargs):
-        """支持文本生成"""
+        """Support text generation"""
         return self.base_model.generate(*args, **kwargs)
 
+    def save_pretrained(self, save_directory):
+        """Save model weights and config"""
+        os.makedirs(save_directory, exist_ok=True)
+        
+        # Save base model
+        self.base_model.save_pretrained(save_directory)
+        
+        # Save detection and classification heads
+        torch.save({
+            'detection_head': self.detection_head.state_dict(),
+            'class_head': self.class_head.state_dict()
+        }, os.path.join(save_directory, "custom_heads.bin"))
+        
+        # Save config
+        with open(os.path.join(save_directory, "config.json"), "w") as f:
+            json.dump({"num_classes": self.num_classes}, f)
+        
+        print(f"Model saved to {save_directory}")
+    
+    @classmethod
+    def from_pretrained(cls, save_directory):
+        """Load model from saved directory"""
+        # Load config
+        with open(os.path.join(save_directory, "config.json"), "r") as f:
+            config = json.load(f)
+        num_classes = config["num_classes"]
+        
+        # Initialize model
+        model = cls(model_id=save_directory, num_classes=num_classes)
+        
+        # Load base model
+        model.base_model = AutoModelForVision2Seq.from_pretrained(save_directory)
+        
+        # Load detection and classification heads
+        heads_weights = torch.load(os.path.join(save_directory, "custom_heads.bin"))
+        model.detection_head.load_state_dict(heads_weights['detection_head'])
+        model.class_head.load_state_dict(heads_weights['class_head'])
+        
+        return model
+
+
 def create_model(model_id, num_classes=2):
-    """创建并配置模型"""
-    # 创建基础模型
+    """Create and configure model"""
+    # Create base model
     model = PaliGemmaMultitaskModel(model_id, num_classes)
     
-    # LoRA 配置
+    # LoRA config
     peft_config = LoraConfig(
-        r=8,  # LoRA 秩
+        r=8,  # LoRA rank
         lora_alpha=32,
         target_modules=[
             "q_proj", "v_proj", "k_proj", "o_proj",
@@ -88,7 +135,7 @@ def create_model(model_id, num_classes=2):
         task_type="CAUSAL_LM"
     )
     
-    # 应用 LoRA
+    # Apply LoRA
     model = get_peft_model(model, peft_config)
     
     return model 

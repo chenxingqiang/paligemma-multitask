@@ -1,23 +1,23 @@
 # PaliGemma Multitask
 
-A toolkit for object detection and multimodal tasks using PaliGemma. This project integrates with Google Research's big_vision repository to provide advanced computer vision capabilities.
+A toolkit for defect detection and analysis using PaliGemma. This project combines vision-language capabilities with specialized defect detection features.
 
 ## Features
 
-- Object detection and multimodal task support
-- Integration with Google's big_vision repository
-- Text-to-detection conversion
-- Text generation capabilities
-- Visual question answering
-- Visualization utilities
+- Defect detection with bounding box visualization
+- Position-aware defect localization
+- Automated defect description generation
+- Basic visual question answering
+- LoRA-based fine-tuning support
 
 ## Requirements
 
+See `inference_requirements.txt` for the complete list:
 - Python >= 3.7
 - PyTorch >= 1.9.0
-- transformers
-- pillow
-- matplotlib
+- transformers >= 4.30.0
+- peft >= 0.4.0
+- accelerate >= 0.20.0
 - Other dependencies as specified in requirements.txt
 
 ## Installation
@@ -36,141 +36,88 @@ python -m venv .venv
 source .venv/bin/activate  # On Windows use: .venv\Scripts\activate
 ```
 
-3. Install the package:
+3. Install the requirements:
 
 ```bash
-pip install -e .
+pip install -r inference_requirements.txt
 ```
 
-## Training Process
+## Model Architecture
 
-The training process converts text-image pairs into object detection tasks through the following steps:
+The model uses a multi-task architecture with:
+1. PaLiGemma base model for vision-language understanding
+2. Custom detection head for bounding box prediction
+3. Custom classification head for defect type classification
+4. LoRA adapters for efficient fine-tuning
 
-1. **Text Parsing Stage**:
-   - Parses location information from text descriptions
-   - When text contains phrases like "void in the top left" or "crack at the center":
-     - Identifies defect type (void/crack)
-     - Extracts position descriptions (top left, center, etc.)
-     - Converts position descriptions to normalized coordinates
+## Inference Usage
 
-2. **Coordinate Mapping**:
-   - Uses predefined position mapping:
-     - "center" → [0.5, 0.5]
-     - "top left" → [0.25, 0.25]
-     - "bottom right" → [0.75, 0.75]
+The model provides three main functionalities:
 
-3. **Bounding Box Generation**:
-   - Generates boxes from center coordinates
-   - Format: [x1, y1, x2, y2]
-   - Uses fixed size (center point ±0.1)
-
-4. **Class Mapping**:
-   - Maps text labels to numeric classes:
-     - "void" → 0
-     - "crack" → 1
-
-5. **Model Training**:
-   - Processes both image and text inputs
-   - Uses two prediction heads:
-     - Detection head: predicts box coordinates
-     - Classification head: predicts defect types
-
-6. **Loss Calculation**:
-   - Detection loss: MSE loss for box coordinates
-   - Classification loss: Cross-entropy loss for defect types
-
-## Training Usage
-
-1. Set up environment variable for Hugging Face:
-
-```bash
-export HF=your_huggingface_token
-```
-
-2. Run training script:
-
-```bash
-python examples/train.py \
-    --dataset_path ./dataset/p-1.v1i.paligemma-multimodal/dataset \
-    --model_id google/paligemma-3b-mix-224 \
-    --batch_size 4 \
-    --num_epochs 3 \
-    --learning_rate 2e-4
-```
-
-After training, the model will be:
-
-1. Saved locally as `final_model.pt`
-2. Uploaded to Hugging Face Hub
-3. Complete with configurations and documentation
-
-## Model Usage
-
-Install required packages:
-
-```bash
-pip install torch transformers pillow matplotlib
-```
-
-Basic usage:
+### 1. Defect Detection
 
 ```python
-from transformers import AutoProcessor, AutoModelForVision2Seq
+from transformers import AutoProcessor
+from paligemma_multitask.model import create_model
 
 # Load model and processor
-processor = AutoProcessor.from_pretrained("xingqiang/paligemma-multitask-detector")
-model = AutoModelForVision2Seq.from_pretrained("xingqiang/paligemma-multitask-detector")
+model_id = "google/paligemma-3b-mix-224"
+processor = AutoProcessor.from_pretrained(model_id)
+model = create_model(model_id=model_id, num_classes=2)
 
-# Prepare image
-image_path = "your_image.jpg"
-```
+# Load weights
+checkpoint = torch.load('best_model.pt', map_location='cpu')
+model.load_state_dict(checkpoint['model_state_dict'])
+model.eval()
 
-### 1. Object Detection
-
-```python
 # Detect defects
-boxes, classes = object_detection(model, processor, image_path)
-# Will automatically display image with bounding boxes
+boxes, class_logits = detect_defects(model, processor, "your_image.jpg")
 ```
 
-### 2. Text Generation
+The detection results include:
+- Bounding box coordinates (normalized [0,1])
+- Class logits for defect types (void/crack)
+- Visualization saved as 'detection_result.png'
+
+### 2. Description Generation
 
 ```python
-# Generate defect description
-description = text_generation(model, processor, image_path)
+description = generate_description(model, processor, "your_image.jpg")
 print(description)
 ```
+
+Generates a natural language description including:
+- Defect type (void/crack)
+- Location in the image (e.g., "bottom left", "center")
+- Confidence score
 
 ### 3. Visual Question Answering
 
 ```python
-# Ask questions about the image
-question = "Where is the largest defect located?"
-answer = visual_qa(model, processor, image_path, question)
+answer = answer_question(model, processor, "your_image.jpg", 
+                        "Where is the largest defect located?")
 print(answer)
 ```
 
-For a complete example, see `examples/demo.py`:
+Supports basic questions about:
+- Defect location
+- Number of defects
+- Defect types
 
-```bash
-python examples/demo.py
-```
+## Training Process
 
-## Features of the Demo
+The model is trained using:
+1. LoRA adapters for efficient fine-tuning
+2. Multi-task learning with:
+   - MSE loss for bounding box coordinates
+   - Cross-entropy loss for defect classification
 
-1. Object detection with visualization
-   - Different colors for different defect types
-   - Bounding box display
-   - Class labels
+## Model Weights
 
-2. Text generation
-   - Comprehensive defect descriptions
-   - Natural language output
-
-3. Visual QA
-   - Interactive questioning
-   - Context-aware answers
-   - Multiple question types supported
+The trained model weights are saved in `best_model.pt` which includes:
+- LoRA adapter weights
+- Custom detection head weights
+- Custom classification head weights
 
 ## License
 
