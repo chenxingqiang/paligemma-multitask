@@ -315,3 +315,175 @@ python run_upload.py --repo-id your-username/paligemma-multitask-dataset
 ## 许可证
 
 数据集采用CC BY 4.0许可证。
+
+# PaliGemma Multitask Fine-tuning for Civil Engineering Damage Detection
+
+This repository contains code for fine-tuning Google's PaliGemma multimodal model on ground-penetrating radar (GPR) images for civil engineering damage detection. The project implements a multitask approach that combines caption generation with damage detection (void/crack classification and localization).
+
+## Features
+
+- **Multitask Training**: Combined caption generation and damage detection in a single model
+- **Caption Generation**: Detailed descriptions of GPR images with technical terminology
+- **Damage Detection**: Classification and localization of voids and cracks in GPR images
+- **Inference Scripts**: Separate test scripts for caption generation and damage detection
+
+## Quick Start
+
+### Installation
+
+```bash
+pip install torch transformers peft datasets matplotlib pillow
+```
+
+### Training
+
+For multitask training:
+```bash
+python run_custom_training.py \
+  --model_name "google/paligemma-3b-mix-224" \
+  --dataset_path "dataset" \
+  --annotation_type "multimodal" \
+  --batch_size 2 \
+  --learning_rate 1e-4 \
+  --num_epochs 3
+```
+
+For caption-only training:
+```bash
+python train_caption_simple.py \
+  --dataset_path "dataset" \
+  --output_dir "caption_model" \
+  --batch_size 1 \
+  --learning_rate 5e-5 \
+  --num_epochs 3
+```
+
+### Inference
+
+Test caption generation:
+```bash
+python test_inference_simple.py --dataset_path "dataset" --num_samples 3
+```
+
+Test damage detection:
+```bash
+python test_detection_inference.py --dataset_path "dataset" --num_samples 3
+```
+
+## Project Structure
+
+- `paligemma_multitask/`: Core implementation
+  - `model.py`: PaliGemma model with multitask capabilities
+  - `data.py`: Dataset loading and preprocessing
+  - `training.py`: Training loop with gradient clipping and loss calculation
+  - `utils/`: Helper functions
+- `run_custom_training.py`: Main training script
+- `train_caption_simple.py`: Simplified caption training
+- `test_caption_inference.py`: Caption generation testing
+- `test_detection_inference.py`: Damage detection testing
+- `test_inference_simple.py`: Simple inference with pre-trained model
+
+## Technical Details
+
+### Problem Addressed
+
+This project tackles several challenges in civil engineering damage detection:
+1. Generating detailed captions for specialized GPR images
+2. Detecting and localizing damage (voids and cracks)
+3. Overcoming training challenges like gradient explosion
+
+### Implementation Highlights
+
+- **Gradient Clipping**: Prevents NaN losses during training
+- **Label Processing**: Proper handling of caption labels for language model loss
+- **Combined Loss**: Weighted combination of caption loss and detection loss
+- **Specialized Prompts**: Domain-specific prompts for civil engineering applications
+
+### Common Issues and Solutions
+
+See the [run.md](run.md) file for detailed troubleshooting guidance, including:
+- Image token mismatch issues
+- Gradient explosion during training
+- GPU memory optimization
+
+## Dataset
+
+The dataset includes ground-penetrating radar (GPR) images with annotations describing damage types (void/crack) and their locations, organized as follows:
+
+```
+dataset/
+├── annotations/
+│   ├── multimodal/
+│   │   ├── annotations.train.jsonl
+│   │   └── annotations.valid.jsonl
+│   └── p-1.v1i.paligemma/
+│       ├── annotations.train.jsonl
+│       └── annotations.valid.jsonl
+└── images/
+    └── datasets/
+        └── [image files]
+```
+
+## Full Documentation
+
+For complete documentation on the training and inference process, see [run.md](run.md).
+
+---
+
+# PaliGemma 多任务微调 (中文说明)
+
+本仓库包含用于微调Google的PaLI-GEMMA多模态模型的代码，用于土木工程中地质雷达(GPR)图像的损伤检测。项目实现了一个多任务方法，结合了图像描述生成和损伤检测（空洞/裂缝分类和定位）。
+
+## 功能特点
+
+- **多任务训练**：在单个模型中结合图像描述生成和损伤检测
+- **描述生成**：使用专业术语对GPR图像进行详细描述
+- **损伤检测**：GPR图像中空洞和裂缝的分类和定位
+- **推理脚本**：用于图像描述生成和损伤检测的单独测试脚本
+
+## 快速开始
+
+### 安装
+
+```bash
+pip install torch transformers peft datasets matplotlib pillow
+```
+
+### 训练
+
+多任务训练:
+```bash
+python run_custom_training.py \
+  --model_name "google/paligemma-3b-mix-224" \
+  --dataset_path "dataset" \
+  --annotation_type "multimodal" \
+  --batch_size 2 \
+  --learning_rate 1e-4 \
+  --num_epochs 3
+```
+
+仅图像描述训练:
+```bash
+python train_caption_simple.py \
+  --dataset_path "dataset" \
+  --output_dir "caption_model" \
+  --batch_size 1 \
+  --learning_rate 5e-5 \
+  --num_epochs 3
+```
+
+### 推理
+
+测试图像描述生成:
+```bash
+python test_inference_simple.py --dataset_path "dataset" --num_samples 3
+```
+
+测试损伤检测:
+```bash
+python test_detection_inference.py --dataset_path "dataset" --num_samples 3
+```
+
+## 详细文档
+
+有关训练和推理过程的完整文档，请参阅[run.md](run.md)。
