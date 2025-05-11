@@ -223,99 +223,6 @@ The evaluation scripts calculate:
 
 This project is licensed under the MIT License - see the LICENSE file for details.
 
-# PaliGemma Multitask Dataset
-
-本仓库包含用于微调Google的PaLI-GEMMA多模态模型的数据集。数据集包含两个子集：
-
-1. **p-1.v1i.paligemma**: 主要数据集，包含874张图像，带有检测和分析缺陷（空洞和裂缝）的标注。
-2. **p-1.v1i.paligemma-multimodal**: 扩展数据集，包含多种模态任务的图像和标注。
-
-## 数据集结构
-
-数据集组织如下：
-
-```
-dataset/
-├── annotations/ - 包含JSON和JSONL格式的标注文件
-│   ├── _annotations.train.jsonl - 训练集标注
-│   ├── _annotations.valid.jsonl - 验证集标注
-│   ├── _annotations.test.jsonl - 测试集标注
-│   ├── p-1.v1i.paligemma/ - 主数据集元数据
-│   └── p-1.v1i.paligemma-multimodal/ - 多模态数据集元数据
-├── images/ - 包含所有图像文件
-│   ├── train/ - 训练集图像
-│   ├── val/ - 验证集图像
-│   └── test/ - 测试集图像
-├── push_to_hub.py - 上传数据集到Hugging Face Hub的脚本
-├── paligemma_dataset.py - 数据集加载脚本
-├── verify_dataset.py - 数据集验证脚本
-└── run_upload.py - 运行验证和上传的脚本
-```
-
-## 注释格式
-
-数据集采用两种注释格式：
-
-1. **JSONL格式**: 每行包含一条图像注释，格式如下：
-   ```json
-   {"image": "image_filename.jpg", "prefix": "detect void ; crack", "suffix": "<loc0486><loc0156><loc0750><loc0592> void"}
-   ```
-
-2. **统一JSON格式**: 转换后的格式，每个注释包含图像文件名、边界框、标签和说明：
-   ```json
-   {
-     "image_filename": "image_filename.jpg",
-     "boxes": [[x1, y1, w1, h1], [x2, y2, w2, h2]],
-     "labels": [0, 1],  // 0表示void，1表示crack
-     "caption": "描述图像中的缺陷",
-     "source": "p1v1"
-   }
-   ```
-
-## 使用方法
-
-### 验证数据集
-
-验证数据集的一致性：
-
-```bash
-python run_upload.py --convert-only
-```
-
-### 转换注释
-
-将注释转换为统一格式：
-
-```bash
-python -c "from paligemma_dataset import convert_annotations_to_unified_format; convert_annotations_to_unified_format()"
-```
-
-### 上传到Hugging Face Hub
-
-将数据集上传到Hugging Face Hub：
-
-```bash
-export HF_TOCKEN=your_huggingface_token
-python run_upload.py --repo-id your-username/paligemma-multitask-dataset
-```
-
-## 引用
-
-如果您使用了这个数据集，请引用：
-
-```
-@misc{chen2024paligemma,
-  title={PaliGemma Multitask Dataset},
-  author={Chen, Xingqiang},
-  year={2024},
-  publisher={Hugging Face}
-}
-```
-
-## 许可证
-
-数据集采用CC BY 4.0许可证。
-
 # PaliGemma Multitask Fine-tuning for Civil Engineering Damage Detection
 
 This repository contains code for fine-tuning Google's PaliGemma multimodal model on ground-penetrating radar (GPR) images for civil engineering damage detection. The project implements a multitask approach that combines caption generation with damage detection (void/crack classification and localization).
@@ -326,6 +233,41 @@ This repository contains code for fine-tuning Google's PaliGemma multimodal mode
 - **Caption Generation**: Detailed descriptions of GPR images with technical terminology
 - **Damage Detection**: Classification and localization of voids and cracks in GPR images
 - **Inference Scripts**: Separate test scripts for caption generation and damage detection
+
+## Project Structure
+
+```
+.
+├── annotations/
+│   ├── p-1.v1i.paligemma/
+│   │   ├── README.dataset.md
+│   │   └── README.roboflow.md
+│   └── p-1.v1i.paligemma-multimodal/
+│       └── README.md
+├── debug_model_structure.py
+├── debug_pali.py
+├── debug_tokenization.py
+├── paligemma_multitask/
+│   ├── __init__.py
+│   ├── config.py
+│   ├── convert_annotations.py
+│   ├── convert.py
+│   ├── data.py
+│   ├── model.py
+│   ├── training.py
+│   ├── object_detection.py
+│   ├── paligemma_dataset.py
+│   └── utils/
+│       ├── environment.py
+│       └── metrics.py
+├── run_custom_training.py
+├── run.md
+├── test_caption_inference.py
+├── test_detection_inference.py
+├── test_inference_simple.py
+├── train_caption_simple.py
+└── train_caption.py
+```
 
 ## Quick Start
 
@@ -369,19 +311,6 @@ Test damage detection:
 ```bash
 python test_detection_inference.py --dataset_path "dataset" --num_samples 3
 ```
-
-## Project Structure
-
-- `paligemma_multitask/`: Core implementation
-  - `model.py`: PaliGemma model with multitask capabilities
-  - `data.py`: Dataset loading and preprocessing
-  - `training.py`: Training loop with gradient clipping and loss calculation
-  - `utils/`: Helper functions
-- `run_custom_training.py`: Main training script
-- `train_caption_simple.py`: Simplified caption training
-- `test_caption_inference.py`: Caption generation testing
-- `test_detection_inference.py`: Damage detection testing
-- `test_inference_simple.py`: Simple inference with pre-trained model
 
 ## Technical Details
 
@@ -428,6 +357,10 @@ dataset/
 
 For complete documentation on the training and inference process, see [run.md](run.md).
 
+## License
+
+This project is licensed under the MIT License - see the LICENSE file for details.
+
 ---
 
 # PaliGemma 多任务微调 (中文说明)
@@ -440,6 +373,24 @@ For complete documentation on the training and inference process, see [run.md](r
 - **描述生成**：使用专业术语对GPR图像进行详细描述
 - **损伤检测**：GPR图像中空洞和裂缝的分类和定位
 - **推理脚本**：用于图像描述生成和损伤检测的单独测试脚本
+
+## 项目结构
+
+```
+.
+├── annotations/                     # 数据集注释文件
+│   ├── p-1.v1i.paligemma/          # 主要数据集元数据
+│   └── p-1.v1i.paligemma-multimodal/ # 多模态数据集元数据
+├── debug_*.py                       # 调试脚本
+├── paligemma_multitask/            # 核心实现
+│   ├── data.py                     # 数据集加载和预处理
+│   ├── model.py                    # PaliGemma多任务模型
+│   ├── training.py                 # 训练循环和损失计算
+│   └── utils/                      # 辅助功能
+├── run_custom_training.py          # 主训练脚本
+├── test_*_inference.py             # 推理测试脚本
+└── train_caption*.py               # 图像描述训练脚本
+```
 
 ## 快速开始
 
