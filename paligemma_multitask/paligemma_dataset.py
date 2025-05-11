@@ -1,0 +1,130 @@
+import os
+import json
+
+def convert_annotations_to_unified_format():
+    """将所有注释转换为统一格式"""
+    print("开始转换注释为统一格式...")
+    
+    # 定义分割名称映射
+    split_mapping = {
+        "train": ["train"],
+        "val": ["val", "valid"],
+        "test": ["test"]
+    }
+    
+    for split, variants in split_mapping.items():
+        print(f"处理 {split} 分割...")
+        unified_annotations = []
+        
+        # 处理 JSON 注释
+        for variant in variants:
+            json_path = f"annotations/{variant}.json"
+            print(f"检查 JSON 文件: {json_path}")
+            if os.path.exists(json_path):
+                print(f"找到 JSON 文件: {json_path}")
+                with open(json_path, encoding="utf-8") as f:
+                    try:
+                        annotations = json.load(f)
+                        print(f"从 {json_path} 加载了 {len(annotations)} 条注释")
+                        for ann in annotations:
+                            unified_annotations.append({
+                                "image_filename": ann["image_filename"],
+                                "boxes": ann["boxes"],
+                                "labels": ann["labels"],
+                                "caption": ann["caption"],
+                                "source": "original"
+                            })
+                    except json.JSONDecodeError:
+                        print(f"错误: {json_path} 不是有效的 JSON 文件")
+        
+        # 处理 JSONL 注释
+        for variant in variants:
+            for jsonl_variant in [f"_annotations.{variant}.jsonl", f"_annotations.{variant}1.jsonl"]:
+                jsonl_path = f"annotations/{jsonl_variant}"
+                print(f"检查 JSONL 文件: {jsonl_path}")
+                if os.path.exists(jsonl_path):
+                    print(f"找到 JSONL 文件: {jsonl_path}")
+                    annotation_count = 0
+                    with open(jsonl_path, encoding="utf-8") as f:
+                        for line_num, line in enumerate(f, 1):
+                            try:
+                                line = line.strip()
+                                if not line:  # 跳过空行
+                                    print(f"跳过第 {line_num} 行: 空行")
+                                    continue
+                                    
+                                ann = json.loads(line)
+                                image_filename = ann.get("image", "")
+                                
+                                if not image_filename:
+                                    print(f"跳过第 {line_num} 行: 没有图像文件名")
+                                    continue
+                                    
+                                # 检查图像是否存在
+                                image_exists = False
+                                for img_split in ["train", "val", "test"]:
+                                    if os.path.exists(f"images/{img_split}/{image_filename}"):
+                                        image_exists = True
+                                        break
+                                
+                                if not image_exists:
+                                    print(f"警告: 图像文件不存在: {image_filename}")
+                                    continue
+                                
+                                # 转换为统一格式
+                                if "annotations" in ann:
+                                    # 处理新格式
+                                    boxes = [[b["x"], b["y"], b["width"], b["height"]] for b in ann["annotations"]]
+                                    labels = [0 if b["class"] == "void" else 1 for b in ann["annotations"]]
+                                    caption = f"Image contains {len(boxes)} defects: " + \
+                                            ", ".join([b["class"] for b in ann["annotations"]])
+                                else:
+                                    # 处理旧格式 (prefix/suffix)
+                                    boxes = []
+                                    labels = []
+                                    caption = ann.get("prefix", "")
+                                    
+                                    if "suffix" in ann:
+                                        parts = ann["suffix"].split(";")
+                                        for part in parts:
+                                            part = part.strip()
+                                            if "<loc" in part:
+                                                # 解析位置和标签
+                                                loc_parts = part.split()
+                                                if len(loc_parts) >= 2:
+                                                    # 提取坐标
+                                                    coords = []
+                                                    for loc in loc_parts[0].split("><"):
+                                                        if loc.startswith("<loc"):
+                                                            try:
+                                                                coords.append(int(loc[4:-1]) / 1024)  # 归一化坐标
+                                                            except ValueError:
+                                                                continue
+                                                    
+                                                    if len(coords) == 4:
+                                                        boxes.append(coords)
+                                                        label = 0 if "void" in loc_parts[1] else 1
+                                                        labels.append(label)
+                                
+                                unified_annotations.append({
+                                    "image_filename": image_filename,
+                                    "boxes": boxes,
+                                    "labels": labels,
+                                    "caption": caption,
+                                    "source": "p1v1"
+                                })
+                                annotation_count += 1
+                            except json.JSONDecodeError as e:
+                                print(f"警告: {jsonl_path} 第 {line_num} 行不是有效的 JSON: {e}")
+                                continue
+                    print(f"从 {jsonl_path} 加载了 {annotation_count} 条注释")
+        
+        # 保存统一格式的注释
+        if unified_annotations:
+            print(f"为 {split} 创建统一格式注释，共 {len(unified_annotations)} 条记录")
+            unified_path = f"annotations/{split}_unified.json"
+            with open(unified_path, "w", encoding="utf-8") as f:
+                json.dump(unified_annotations, f, ensure_ascii=False, indent=2)
+            print(f"已保存统一格式注释到: {unified_path}")
+        else:
+            print(f"警告: {split} 没有有效的注释，跳过创建统一格式文件") 

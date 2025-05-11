@@ -1,132 +1,317 @@
-# PaliGemma Multitask
+# Ground-Penetrating Radar Damage Detection with PaLI-GEMMA
 
-A toolkit for defect detection and analysis using PaliGemma. This project combines vision-language capabilities with specialized defect detection features.
+This repository contains scripts for fine-tuning Google's PaLI-GEMMA multimodal model on a ground-penetrating radar (GPR) damage detection dataset. The dataset contains images of GPR scans with annotations for void and crack damages.
 
-## Features
+## Dataset
 
-- Defect detection with bounding box visualization
-- Position-aware defect localization
-- Automated defect description generation
-- Basic visual question answering
-- LoRA-based fine-tuning support
+The dataset consists of ground-penetrating radar images with annotations describing the presence, location, and characteristics of voids and cracks. The annotations are provided in two formats:
+
+1. **Basic descriptions**: General descriptions of damage appearance and location
+2. **Technical descriptions**: Detailed technical descriptions including amplitude, attenuation, and distribution range
+
+## Scripts
+
+The repository includes the following scripts:
+
+1. `process_dataset.py`: Processes the raw dataset files and organizes them into training and testing sets
+2. `prepare_paligemma_dataset.py`: Prepares the dataset for fine-tuning with PaLI-GEMMA, creating different versions with various prompt formats
+3. `finetune_paligemma.py`: Fine-tunes PaLI-GEMMA on the prepared dataset using standard supervised learning
+4. `evaluate_model.py`: Evaluates the fine-tuned model on the test dataset
+5. `finetune_paligemma_grpo.py`: Fine-tunes PaLI-GEMMA using Group Relative Policy Optimization (GRPO)
+6. `evaluate_grpo_model.py`: Evaluates the GRPO-trained model and generates responses in reporter format
+7. `generate_report.py`: Generates technical reports in reporter format for new images
+8. `run_all.sh`: Shell script to run the standard fine-tuning pipeline
+9. `run_grpo.sh`: Shell script to run the GRPO fine-tuning pipeline
 
 ## Requirements
 
-See `inference_requirements.txt` for the complete list:
-- Python >= 3.7
-- PyTorch >= 1.9.0
-- transformers >= 4.30.0
-- peft >= 0.4.0
-- accelerate >= 0.20.0
-- Other dependencies as specified in requirements.txt
-
-## Installation
-
-1. Clone the repository:
+Install the required packages:
 
 ```bash
-git clone https://github.com/chenxingqiang/paligemma-multitask-finetune.git
-cd paligemma-multitask-finetune
+pip install torch transformers pillow numpy tqdm scikit-learn matplotlib seaborn datasets trl
 ```
 
-2. Create and activate a virtual environment:
+For GRPO with vLLM acceleration (optional):
 
 ```bash
-python -m venv .venv
-source .venv/bin/activate  # On Windows use: .venv\Scripts\activate
+pip install vllm
 ```
 
-3. Install the requirements:
+## Usage
+
+### Standard Fine-tuning
+
+Run the standard fine-tuning pipeline:
 
 ```bash
-pip install -r inference_requirements.txt
+./run_all.sh
 ```
 
-## Model Architecture
+### GRPO Fine-tuning
 
-The model uses a multi-task architecture with:
-1. PaLiGemma base model for vision-language understanding
-2. Custom detection head for bounding box prediction
-3. Custom classification head for defect type classification
-4. LoRA adapters for efficient fine-tuning
+Run the GRPO fine-tuning pipeline, which enhances the model's reasoning capabilities and produces reporter-style outputs:
 
-## Inference Usage
-
-The model provides three main functionalities:
-
-### 1. Defect Detection
-
-```python
-from transformers import AutoProcessor
-from paligemma_multitask.model import create_model
-
-# Load model and processor
-model_id = "google/paligemma-3b-mix-224"
-processor = AutoProcessor.from_pretrained(model_id)
-model = create_model(model_id=model_id, num_classes=2)
-
-# Load weights
-checkpoint = torch.load('best_model.pt', map_location='cpu')
-model.load_state_dict(checkpoint['model_state_dict'])
-model.eval()
-
-# Detect defects
-boxes, class_logits = detect_defects(model, processor, "your_image.jpg")
+```bash
+./run_grpo.sh
 ```
 
-The detection results include:
-- Bounding box coordinates (normalized [0,1])
-- Class logits for defect types (void/crack)
-- Visualization saved as 'detection_result.png'
+### Generate Technical Reports
 
-### 2. Description Generation
+Generate technical reports for new images using the GRPO-trained model:
 
-```python
-description = generate_description(model, processor, "your_image.jpg")
-print(description)
+```bash
+# For a single image
+python generate_report.py --image_path path/to/your/image.jpg
+
+# For a directory of images
+python generate_report.py --image_path path/to/your/images/directory
 ```
 
-Generates a natural language description including:
-- Defect type (void/crack)
-- Location in the image (e.g., "bottom left", "center")
-- Confidence score
+Available options:
+- `--model_path`: Path to the fine-tuned model (default: "paligemma_grpo_finetuned/final_model")
+- `--image_path`: Path to the image or directory of images (required)
+- `--output_dir`: Output directory for the generated reports (default: "reports")
+- `--device`: Device to run inference on (default: "cuda" if available, otherwise "cpu")
 
-### 3. Visual Question Answering
+### 1. Process the Dataset
 
-```python
-answer = answer_question(model, processor, "your_image.jpg", 
-                        "Where is the largest defect located?")
-print(answer)
+First, process the raw dataset files:
+
+```bash
+python process_dataset.py
 ```
 
-Supports basic questions about:
-- Defect location
-- Number of defects
-- Defect types
+This will create a `processed_dataset` directory with the following structure:
 
-## Training Process
+```
+processed_dataset/
+├── metadata.json
+├── train/
+│   ├── annotations_basic.jsonl
+│   ├── annotations_technical.jsonl
+│   ├── annotations_combined.jsonl
+│   └── images/
+└── test/
+    ├── annotations_basic.jsonl
+    ├── annotations_technical.jsonl
+    ├── annotations_combined.jsonl
+    └── images/
+```
 
-The model is trained using:
-1. LoRA adapters for efficient fine-tuning
-2. Multi-task learning with:
-   - MSE loss for bounding box coordinates
-   - Cross-entropy loss for defect classification
+### 2. Prepare the Dataset for PaLI-GEMMA
 
-## Model Weights
+Next, prepare the dataset for fine-tuning with PaLI-GEMMA:
 
-The trained model weights are saved in `best_model.pt` which includes:
-- LoRA adapter weights
-- Custom detection head weights
-- Custom classification head weights
+```bash
+python prepare_paligemma_dataset.py
+```
+
+This will create a `paligemma_dataset` directory with different versions of the dataset:
+
+- `basic_detection_train.jsonl` / `basic_detection_test.jsonl`: Simple detection of void or crack presence
+- `descriptive_train.jsonl` / `descriptive_test.jsonl`: General descriptions of damage appearance and location
+- `technical_train.jsonl` / `technical_test.jsonl`: Detailed technical descriptions of damage characteristics
+- `combined_train.jsonl` / `combined_test.jsonl`: Mix of all prompt types and description formats
+
+### 3. Fine-tune PaLI-GEMMA
+
+#### Standard Fine-tuning
+
+Fine-tune PaLI-GEMMA on the prepared dataset using standard supervised learning:
+
+```bash
+python finetune_paligemma.py --model_name google/paligemma-3b-mix-224 --dataset_version combined --num_epochs 3 --batch_size 8 --fp16
+```
+
+#### GRPO Fine-tuning
+
+Fine-tune PaLI-GEMMA using Group Relative Policy Optimization (GRPO), which enhances the model's reasoning capabilities:
+
+```bash
+python finetune_paligemma_grpo.py --model_name google/paligemma-3b-mix-224 --dataset_version combined --num_epochs 3 --batch_size 4 --num_generations 8 --fp16
+```
+
+GRPO-specific parameters:
+
+- `--num_generations`: Number of generations per prompt to sample (default: 8)
+- `--beta`: KL coefficient for GRPO (default: 0.04)
+- `--epsilon`: Epsilon value for clipping in GRPO (default: 0.2)
+- `--use_vllm`: Use vLLM for generation acceleration (flag)
+
+### 4. Evaluate the Fine-tuned Model
+
+#### Standard Evaluation
+
+Evaluate the standard fine-tuned model:
+
+```bash
+python evaluate_model.py --model_path paligemma_finetuned/final_model --dataset_version combined
+```
+
+#### GRPO Evaluation with Reporter Format
+
+Evaluate the GRPO-trained model and generate responses in reporter format:
+
+```bash
+python evaluate_grpo_model.py --model_path paligemma_grpo_finetuned/final_model --dataset_version combined
+```
+
+The reporter format provides concise, factual, and structured descriptions of the damage in the radar images, similar to a professional technical report.
+
+## Dataset Versions
+
+The dataset is prepared in different versions for different training scenarios:
+
+1. **Basic Detection**: Simple detection of void or crack presence
+   - Prompt: "detect void" or "detect crack"
+   - Response: "void" or "crack"
+
+2. **Descriptive**: General descriptions of damage appearance and location
+   - Prompt: Various templates like "describe the void in this image", "analyze the ground-penetrating radar image for crack", etc.
+   - Response: Detailed description of the damage
+
+3. **Technical**: Detailed technical descriptions of damage characteristics
+   - Prompt: "provide technical details about the void/crack in this radar image"
+   - Response: Technical description including amplitude, attenuation, and distribution range
+
+4. **Combined**: Mix of all prompt types and description formats
+
+## GRPO Training
+
+Group Relative Policy Optimization (GRPO) is an advanced reinforcement learning technique that enhances the model's reasoning capabilities. It was introduced in the paper "DeepSeekMath: Pushing the Limits of Mathematical Reasoning in Open Language Models".
+
+The GRPO implementation in this repository:
+
+1. Generates multiple completions for each prompt
+2. Computes rewards based on technical detail, location accuracy, and reporter format
+3. Optimizes the model to maximize these rewards while staying close to the reference policy
+4. Produces outputs in a concise, factual reporter style format
+
+## Reporter Format
+
+The reporter format provides a structured, professional way to describe damage in radar images:
+
+1. **Concise**: Avoids unnecessary words and focuses on facts
+2. **Factual**: Presents information in a clear, objective manner
+3. **Structured**: Organizes information logically
+4. **Professional**: Avoids first-person references and maintains a formal tone
+
+Example:
+```
+Void damage detected in the center of the image. Characterized by an irregular hyperbolic shape with strong amplitude. Distribution range is large with noticeable multiple reflections.
+```
+
+## Model Outputs
+
+The fine-tuned models can:
+
+1. Detect the presence of voids and cracks in GPR images
+2. Describe the location and appearance of damages
+3. Provide technical details about the damage characteristics
+4. (GRPO model) Generate professional reporter-style technical reports
+
+## Evaluation Metrics
+
+The evaluation scripts calculate:
+
+1. Accuracy, precision, recall, and F1 score for void and crack detection
+2. Confusion matrix for damage type classification
+3. Sample predictions for descriptive tasks
+4. (GRPO model) Technical reports in reporter format
 
 ## License
 
 This project is licensed under the MIT License - see the LICENSE file for details.
 
-## Author
+# PaliGemma Multitask Dataset
 
-- chenxingqiang (<chen.xingqiang@iechor.com>)
+本仓库包含用于微调Google的PaLI-GEMMA多模态模型的数据集。数据集包含两个子集：
 
-## Contributing
+1. **p-1.v1i.paligemma**: 主要数据集，包含874张图像，带有检测和分析缺陷（空洞和裂缝）的标注。
+2. **p-1.v1i.paligemma-multimodal**: 扩展数据集，包含多种模态任务的图像和标注。
 
-Contributions are welcome! Please feel free to submit a Pull Request.
+## 数据集结构
+
+数据集组织如下：
+
+```
+dataset/
+├── annotations/ - 包含JSON和JSONL格式的标注文件
+│   ├── _annotations.train.jsonl - 训练集标注
+│   ├── _annotations.valid.jsonl - 验证集标注
+│   ├── _annotations.test.jsonl - 测试集标注
+│   ├── p-1.v1i.paligemma/ - 主数据集元数据
+│   └── p-1.v1i.paligemma-multimodal/ - 多模态数据集元数据
+├── images/ - 包含所有图像文件
+│   ├── train/ - 训练集图像
+│   ├── val/ - 验证集图像
+│   └── test/ - 测试集图像
+├── push_to_hub.py - 上传数据集到Hugging Face Hub的脚本
+├── paligemma_dataset.py - 数据集加载脚本
+├── verify_dataset.py - 数据集验证脚本
+└── run_upload.py - 运行验证和上传的脚本
+```
+
+## 注释格式
+
+数据集采用两种注释格式：
+
+1. **JSONL格式**: 每行包含一条图像注释，格式如下：
+   ```json
+   {"image": "image_filename.jpg", "prefix": "detect void ; crack", "suffix": "<loc0486><loc0156><loc0750><loc0592> void"}
+   ```
+
+2. **统一JSON格式**: 转换后的格式，每个注释包含图像文件名、边界框、标签和说明：
+   ```json
+   {
+     "image_filename": "image_filename.jpg",
+     "boxes": [[x1, y1, w1, h1], [x2, y2, w2, h2]],
+     "labels": [0, 1],  // 0表示void，1表示crack
+     "caption": "描述图像中的缺陷",
+     "source": "p1v1"
+   }
+   ```
+
+## 使用方法
+
+### 验证数据集
+
+验证数据集的一致性：
+
+```bash
+python run_upload.py --convert-only
+```
+
+### 转换注释
+
+将注释转换为统一格式：
+
+```bash
+python -c "from paligemma_dataset import convert_annotations_to_unified_format; convert_annotations_to_unified_format()"
+```
+
+### 上传到Hugging Face Hub
+
+将数据集上传到Hugging Face Hub：
+
+```bash
+export HF_TOCKEN=your_huggingface_token
+python run_upload.py --repo-id your-username/paligemma-multitask-dataset
+```
+
+## 引用
+
+如果您使用了这个数据集，请引用：
+
+```
+@misc{chen2024paligemma,
+  title={PaliGemma Multitask Dataset},
+  author={Chen, Xingqiang},
+  year={2024},
+  publisher={Hugging Face}
+}
+```
+
+## 许可证
+
+数据集采用CC BY 4.0许可证。
